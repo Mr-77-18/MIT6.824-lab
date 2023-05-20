@@ -23,7 +23,23 @@ type ExampleReply struct {
 }
 
 // Add your RPC definitions here.
+//follow is the example about myself
+type Liu_args struct {
+	Name string
+}
 
+type Liu_reply struct {
+	Dial string
+}
+
+//the type of version that just have a work
+type Filename struct{
+	Files []string
+}
+
+type Work_name struct{
+	Name string
+}
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the coordinator.

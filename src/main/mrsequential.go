@@ -18,9 +18,9 @@ import "sort"
 type ByKey []mr.KeyValue
 
 // for sorting by key.
-func (a ByKey) Len() int           { return len(a) }
-func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
+func (a ByKey) Len() int           { return len(a) }//have no args but have return values
+func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }//have args but do not have return values
+func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }//both have args and return values
 
 func main() {
 	if len(os.Args) < 3 {
@@ -28,7 +28,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	mapf, reducef := loadPlugin(os.Args[1])
+	mapf, reducef := loadPlugin(os.Args[1])//add the plugin to val mapf and reducef(it is programe for wc)
 
 	//
 	// read each input file,
@@ -36,17 +36,22 @@ func main() {
 	// accumulate the intermediate Map output.
 	//
 	intermediate := []mr.KeyValue{}
-	for _, filename := range os.Args[2:] {
-		file, err := os.Open(filename)
-		if err != nil {
+	for _, filename := range os.Args[2:] {//Args[2] means the input file needed to word count
+
+		file, err := os.Open(filename)//open the file
+
+		if err != nil {//if error, and then deal with it
 			log.Fatalf("cannot open %v", filename)
 		}
-		content, err := ioutil.ReadAll(file)
-		if err != nil {
+
+		content, err := ioutil.ReadAll(file)//read text from file prepared for subsequent processing
+
+		if err != nil {//if error , and then deal with it
 			log.Fatalf("cannot read %v", filename)
 		}
-		file.Close()
-		kva := mapf(filename, string(content))
+
+		file.Close()//after read , we should close the file
+		kva := mapf(filename, string(content))//call plugin and past the plugin to it and then return key-value
 		intermediate = append(intermediate, kva...)
 	}
 
@@ -55,7 +60,7 @@ func main() {
 	// intermediate data is in one place, intermediate[],
 	// rather than being partitioned into NxM buckets.
 	//
-
+	
 	sort.Sort(ByKey(intermediate))
 
 	oname := "mr-out-0"
@@ -68,6 +73,7 @@ func main() {
 	i := 0
 	for i < len(intermediate) {
 		j := i + 1
+		//key is already be sorted
 		for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
 			j++
 		}
@@ -75,10 +81,12 @@ func main() {
 		for k := i; k < j; k++ {
 			values = append(values, intermediate[k].Value)
 		}
-		output := reducef(intermediate[i].Key, values)
+
+		//i mean the values should include all counts in file,reducef just need to do sum
+		output := reducef(intermediate[i].Key, values)//call the plugin again and return output which define the count of the word
 
 		// this is the correct format for each line of Reduce output.
-		fmt.Fprintf(ofile, "%v %v\n", intermediate[i].Key, output)
+		fmt.Fprintf(ofile, "%v %v\n", intermediate[i].Key, output)//output like that:work value
 
 		i = j
 	}
@@ -86,18 +94,25 @@ func main() {
 	ofile.Close()
 }
 
+
+
+
+
 // load the application Map and Reduce functions
 // from a plugin file, e.g. ../mrapps/wc.so
 func loadPlugin(filename string) (func(string, string) []mr.KeyValue, func(string, []string) string) {
 	p, err := plugin.Open(filename)
+	//reduce the error
 	if err != nil {
 		log.Fatalf("cannot load plugin %v", filename)
 	}
+
 	xmapf, err := p.Lookup("Map")
 	if err != nil {
 		log.Fatalf("cannot find Map in %v", filename)
 	}
 	mapf := xmapf.(func(string, string) []mr.KeyValue)
+
 	xreducef, err := p.Lookup("Reduce")
 	if err != nil {
 		log.Fatalf("cannot find Reduce in %v", filename)

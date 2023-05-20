@@ -20,7 +20,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	m := mr.MakeCoordinator(os.Args[1:], 10)
+	m := mr.MakeCoordinator(os.Args[1:], 10)//this function should coded by myself,mr mean the package mr
 	for m.Done() == false {
 		time.Sleep(time.Second)
 	}

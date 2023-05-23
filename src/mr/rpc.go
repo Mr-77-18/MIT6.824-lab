@@ -32,13 +32,39 @@ type Liu_reply struct {
 	Dial string
 }
 
-//the type of version that just have a work
+//the type of version that just have a worker
 type Filename struct{
 	Files []string
 }
 
 type Work_name struct{
 	Name string
+}
+
+
+//the type of version that could have more worker
+type Args struct {
+	Text string
+}
+
+type Reply struct{
+	Ta Task
+}
+
+//task that publich by master 
+type Task struct{
+	//show what this task is:map or reduce
+	//map : file name
+	//reduce : reduce number
+	Map_reduce bool	//true  mean map task , false mean reduce task
+	//map task's source
+	Filenames []string
+
+	//reduce task's source 
+	N_reduce int //this field's range is 0 -- nreduce-1
+
+	//nreduce come from user
+	Nreduce int
 }
 
 // Cook up a unique-ish UNIX-domain socket name

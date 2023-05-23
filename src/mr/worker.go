@@ -7,6 +7,8 @@ import "hash/fnv"
 import "io/ioutil"
 import "sort"
 import "os"
+import "strconv"
+import "encoding/json"
 
 //
 // Map functions return a slice of KeyValue.
@@ -16,11 +18,16 @@ type KeyValue struct {
 	Value string
 }
 
-type ByKey []KeyValue
 
-func (a ByKey) Len() int {return len(a)}
-func (a ByKey) Swap(i , j int) {a[i] , a[j] = a[j] , a[i]}
-func (a ByKey) Less(i , j int) bool {return a[i].Key < a[j].Key}
+type Intermediate_list struct{
+	Intermediate []KeyValue
+}
+
+//type ByKey []KeyValue
+//
+//func (a ByKey) Len() int {return len(a)}
+//func (a ByKey) Swap(i , j int) {a[i] , a[j] = a[j] , a[i]}
+//func (a ByKey) Less(i , j int) bool {return a[i].Key < a[j].Key}
 
 //
 // use ihash(key) % NReduce to choose the reduce
@@ -32,68 +39,148 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-
-//
-// main/mrworker.go calls this function.
-//
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string){
 
-	// Your worker implementation here.
+	// Yor worker implementation here.
+	task := Call_requst_task().Ta
+	if task.Map_reduce < 0 {// indicate all of the tasks have been done
+		return 
+	}
+
+	if task.Map_reduce == 1{//it mean it is the map tasks
+		//and only the Filenames filed belongs to map tasks
+		files := task.Filenames
+
+		nreduce := task.Nreduce
+
+		intermediate_list := [nreduce]Intermediate_list{} 
+		intermediate := []KeyValue{}
+
+		var n_reduce int
+
+		for _, filename := range files{
+			file , err := os.Open(filename)
+
+			if err != nil{
+				log.Fatalf("cannot open %v" , filename)
+			}
+
+			content , err := ioutil.ReadAll(file)
+
+			if err != nil{
+				log.Fatalf("cannot read %v" , filename)
+			}
+
+			file.Close()
+			kva := mapf(filename , string(content))
+
+			//n_reduce = ihash(kva.Key)
+
+			intermediate = append(intermediate , kva...)
+		}
+
+		//save the key-value to intermediate_list
+		sort.Sort(ByKey(intermediate))	
+		i := 0
+		for i < len(intermediate){
+			j := i + 1
+			for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key{
+				j++
+			}
+			values := []string{}
+			n_reduce = ihash(intermediate[i].Key)
+			for k := i ; k < j ; k++{
+				intermediate_list = append(intermediate_list[n_reduce] , intermediate[k])
+			}
+
+			i = j
+		}
+
+		//save the key-value to different file
+		i = 0
+		for _, interm := range intermediate_list{
+			if len(interm) != 0 {
+				filename = "mr-" + strconv.Intoa(i)
+				file , err = os.Open(filename)
+				
+				if err != nil{
+					log.Fatalf("cannot open %v" , filename)
+				}
+				//save the key-value in filename,which named is mr-<n-reduce>
+				enc := json.NewEncoder(file)
+				for _, kv := range interm{
+					enc.Encode(&kv)
+				}
+			}
+		}
+
+	}else{//it mean it is the reduce tasks
+		//and only the n_reduce filed belongs to reduece tasks
+		n_reduce := task.N_reduce	
+
+		//after get the n_reduce , we know open which file to do reduce task,because the file name is mr-<n_reduce>
+		filename := "mr-" + strconv.Intoa(n_reduce)
+
+		file , err = os.Open(filename)
+		
+		if err != nil{
+			log.Fatalf("cannot open file %v" , filename)
+		}
+
+		//readfile and store them in intermediate(key-value) struct
+		intermediate := []KeyValue{}
+		dec := json.NewDecoder(file)
+		for{
+			var kv KeyValue
+			if err := dec.Decode(&kv) ; err != nil{
+				break
+			}
+			intermediate = append(intermediate , kv)
+		}
+
+		sort.Sort(ByKey(intermediate))
+
+		oname := "mr-out-" + strconv.Intoa(n_reduce)
+		ofile , _ := os.Create(oname)
+
+		i := 0
+		for i < len(intermediate){
+			j := i + 1
+			for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key{
+				j++
+			}
+			values := []string{}
+			for k := i ; k < j ; k++{
+				values = append(values , intermediate[k].Value)
+			}
+			output := reducef(intermediate[i].Key , values)
+
+			fmt.Fprint(ofile , "%v %v\n" , intermediate[i].Key , output)
+
+			i = j
+		}
+		ofile.Close()
+	}
 
 	// uncomment to send the Example RPC to the coordinator.
 	//CallExample()
-	File_name := Call_get_filename()//to get the file name in the coordinator
-	//do the work
 	
-	//when the work is done , we need to call the rpc function : Work_done to notic the coordinator that the map and reduce functio is done
-	//the plugin has been loaded
-	intermediate := []KeyValue{}
-	for _, filename := range File_name.Files{
-		file , err := os.Open(filename)
+}
 
-		if err != nil{
-			log.Fatalf("cannot open %v" , filename)
-		}
+func Call_requst_task() Reply {
+	args := Args{}
+	args.Text = "i request a task for map or reduce"
 
-		content , err := ioutil.ReadAll(file)
+	reply := Reply{}
 
-		if err != nil{
-			log.Fatalf("cannot  read %v" , filename)
-		}
-
-		file.Close()
-
-		kva := mapf(filename , string(content))
-
-		intermediate = append(intermediate , kva...)
+	ok :=  call("Coordinator.Request_task" , &args , &reply)
+	if ok{
+	}else{
+		fmt.Printf("call request task fail\n")
 	}
 
-	sort.Sort(ByKey(intermediate))
-	oname := "mr-out-0"
-	ofile, _ := os.Create(oname)
-
-	i:=0
-	for i < len(intermediate){
-		j := i + 1
-		for j< len(intermediate) && intermediate[j].Key == intermediate[i].Key{
-			j++
-		}
-		values := []string{}
-		for k := i ; k < j ; k++ {
-			values = append(values , intermediate[k].Value)
-		}
-
-		output := reducef(intermediate[i].Key , values)
-
-		fmt.Fprint(ofile , "%v %v\n" , intermediate[i].Key , output)
-
-		i = j
-	}
-
-	ofile.Close()
-
-	Call_work_done()
+	return reply
 }
 
 //
@@ -122,75 +209,6 @@ func CallExample() {
 		fmt.Printf("reply.Y %v\n", reply.Y)
 	} else {
 		fmt.Printf("call failed!\n")
-	}
-}
-
-
-func Call_Liu_example() {
-
-	// declare an argument structure.
-	args := Liu_args{}
-
-	// fill in the argument(s).
-	args.Name = "Senhong Liu"
-
-	// declare a reply structure.
-	reply := Liu_reply{}
-
-	// send the RPC request, wait for the reply.
-	// the "Coordinator.Example" tells the
-	// receiving server that we'd like to call
-	// the Example() method of struct Coordinator.
-	ok := call("Coordinator.Liu_example", &args, &reply)
-	if ok {
-		// reply.Y should be 100.
-		fmt.Printf("response is %s\n", reply.Dial)
-	} else {
-		fmt.Printf("call failed!\n")
-	}
-}
-
-
-func Call_get_filename() Filename{
-
-	// declare an argument structure.
-	args := Work_name{}
-
-	args.Name = "work1"
-
-	// fill in the argument(s).
-
-	// declare a reply structure.
-	reply := Filename{}
-
-
-	// send the RPC request, wait for the reply.
-	// the "Coordinator.Example" tells the
-	// receiving server that we'd like to call
-	// the Example() method of struct Coordinator.
-	ok := call("Coordinator.Get_filename", &args, &reply)
-	if ok {
-		// reply.Y should be 100.
-		fmt.Printf("filename read complete\n")
-	} else {
-		fmt.Printf("read filename error , call failed!\n")
-	}
-
-	return reply
-}
-
-
-
-func Call_work_done() {
-	args := ExampleArgs{}
-	reply := ExampleReply{}
-
-	ok := call("Coordinator.Work_done" , &args , &reply)
-	if ok {
-		// reply.Y should be 100.
-		fmt.Printf("the work is done\n")
-	} else {
-		fmt.Printf("read filename error , call failed!\n")
 	}
 }
 

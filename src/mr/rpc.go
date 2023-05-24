@@ -56,7 +56,7 @@ type Task struct{
 	//show what this task is:map or reduce
 	//map : file name
 	//reduce : reduce number
-	Map_reduce bool	//true  mean map task , false mean reduce task
+	Map_reduce int//1 mean map task , mean reduce task
 	//map task's source
 	Filenames []string
 

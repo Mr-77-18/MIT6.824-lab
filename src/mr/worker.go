@@ -18,11 +18,16 @@ type KeyValue struct {
 	Value string
 }
 
+type ByKey []KeyValue
+
+func (a ByKey) Len() int {return len(a)}
+func (a ByKey) Swap(i , j int) { a[i] , a[j] = a[j] , a[i] }
+func (a ByKey) Less(i , j int) bool { return a[i].Key < a[j].Key}
 
 type Intermediate_list struct{
 	Intermediate []KeyValue
-}
 
+}
 //type ByKey []KeyValue
 //
 //func (a ByKey) Len() int {return len(a)}
@@ -52,9 +57,11 @@ func Worker(mapf func(string, string) []KeyValue,
 		//and only the Filenames filed belongs to map tasks
 		files := task.Filenames
 
-		nreduce := task.Nreduce
+		//nreduce := task.Nreduce
 
-		intermediate_list := [nreduce]Intermediate_list{} 
+		//intermediate_list := []Intermediate_list{} 
+		//intermediate_list := make([]Intermediate_list , nreduce) 
+		intermediate_list := make(map[int][]KeyValue)
 		intermediate := []KeyValue{}
 
 		var n_reduce int
@@ -88,10 +95,12 @@ func Worker(mapf func(string, string) []KeyValue,
 			for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key{
 				j++
 			}
-			values := []string{}
+			//values := []string{}
 			n_reduce = ihash(intermediate[i].Key)
+
 			for k := i ; k < j ; k++{
-				intermediate_list = append(intermediate_list[n_reduce] , intermediate[k])
+				//intermediate_list[n_reduce] = intermediate[k]
+				intermediate_list[n_reduce] = append(intermediate_list[n_reduce], intermediate[k])
 			}
 
 			i = j
@@ -101,8 +110,8 @@ func Worker(mapf func(string, string) []KeyValue,
 		i = 0
 		for _, interm := range intermediate_list{
 			if len(interm) != 0 {
-				filename = "mr-" + strconv.Intoa(i)
-				file , err = os.Open(filename)
+				filename := "mr-" + strconv.Itoa(i)
+				file , err := os.Open(filename)
 				
 				if err != nil{
 					log.Fatalf("cannot open %v" , filename)
@@ -120,9 +129,9 @@ func Worker(mapf func(string, string) []KeyValue,
 		n_reduce := task.N_reduce	
 
 		//after get the n_reduce , we know open which file to do reduce task,because the file name is mr-<n_reduce>
-		filename := "mr-" + strconv.Intoa(n_reduce)
+		filename := "mr-" + strconv.Itoa(n_reduce)
 
-		file , err = os.Open(filename)
+		file , err := os.Open(filename)
 		
 		if err != nil{
 			log.Fatalf("cannot open file %v" , filename)
@@ -141,7 +150,7 @@ func Worker(mapf func(string, string) []KeyValue,
 
 		sort.Sort(ByKey(intermediate))
 
-		oname := "mr-out-" + strconv.Intoa(n_reduce)
+		oname := "mr-out-" + strconv.Itoa(n_reduce)
 		ofile , _ := os.Create(oname)
 
 		i := 0
@@ -156,7 +165,7 @@ func Worker(mapf func(string, string) []KeyValue,
 			}
 			output := reducef(intermediate[i].Key , values)
 
-			fmt.Fprint(ofile , "%v %v\n" , intermediate[i].Key , output)
+			fmt.Fprint(ofile , "%v %v\n", intermediate[i].Key , output)
 
 			i = j
 		}
@@ -185,8 +194,6 @@ func Call_requst_task() Reply {
 
 //
 // example function to show how to make an RPC call to the coordinator.
-//
-// the RPC argument and reply types are defined in rpc.go.
 //
 func CallExample() {
 
